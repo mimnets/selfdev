@@ -39,7 +39,7 @@ const initialState = {
 
 function plannerReducer(state, action) {
     switch (action.type) {
-        case 'START_ACTIVITY':
+        case 'START_ACTIVITY': {
             const currentMemberIdStart = state.currentMemberId;
             let completedActivity = null;
             if (state.currentActivities[currentMemberIdStart]) {
@@ -70,9 +70,10 @@ function plannerReducer(state, action) {
                     [currentMemberIdStart]: newActivity
                 }
             };
+        }
 
         case 'ADD_NOTE':
-        case 'ADD_REMINDER':
+        case 'ADD_REMINDER': {
             // Treat these as completed activities (point in time or future) 
             // OR separate list? User said "list of activities - remainder, notes, Live"
             // Reminders: "time and date"
@@ -99,6 +100,7 @@ function plannerReducer(state, action) {
                 ...state,
                 activities: updatedActivities
             };
+        }
 
         case 'LEARN_RULE':
             // payload: { keyword, category }
@@ -110,7 +112,7 @@ function plannerReducer(state, action) {
                 }
             };
 
-        case 'STOP_ACTIVITY':
+        case 'STOP_ACTIVITY': {
             const currentMemStop = state.currentMemberId;
             if (!state.currentActivities[currentMemStop]) return state;
             const stoppedActivity = {
@@ -125,8 +127,9 @@ function plannerReducer(state, action) {
                     [currentMemStop]: null
                 }
             };
+        }
 
-        case 'ADD_RETROACTIVE':
+        case 'ADD_RETROACTIVE': {
             // Insert activity into history based on provided start/end times
             // sophisticated logic needed here to sort/handle overlaps, simplified for now
             const retroActivity = {
@@ -142,8 +145,9 @@ function plannerReducer(state, action) {
                 ...state,
                 activities: newActivities
             };
+        }
 
-        case 'UPDATE_ACTIVITY':
+        case 'UPDATE_ACTIVITY': {
             const { id, updates } = action.payload;
 
             // customized update logic if needed
@@ -164,6 +168,7 @@ function plannerReducer(state, action) {
                 activities: updatedList,
                 currentActivities: updatedCurrents
             };
+        }
 
         case 'ADD_MEMBER':
             return {
@@ -201,7 +206,7 @@ function plannerReducer(state, action) {
                 acknowledgedReminders: [...(state.acknowledgedReminders || []), action.payload]
             };
 
-        case 'TOGGLE_COMPLETED':
+        case 'TOGGLE_COMPLETED': {
             let updatedActs = (state.activities || []).map(act =>
                 act.id === action.payload ? { ...act, completed: !act.completed } : act
             );
@@ -217,6 +222,7 @@ function plannerReducer(state, action) {
                 activities: updatedActs,
                 currentActivities: updatedCurrentsToggle
             };
+        }
 
         case 'ADD_CATEGORY':
             return {
@@ -239,15 +245,16 @@ function plannerReducer(state, action) {
                 }
             };
 
-        case 'DELETE_CATEGORY':
+        case 'DELETE_CATEGORY': {
             const newCats = { ...state.categories };
             delete newCats[action.payload];
             return {
                 ...state,
                 categories: newCats
             };
+        }
 
-        case 'TOGGLE_SESSION':
+        case 'TOGGLE_SESSION': {
             const memberId = action.payload;
             const currentSessionStart = state.activeSessions[memberId];
             return {
@@ -257,6 +264,7 @@ function plannerReducer(state, action) {
                     [memberId]: currentSessionStart ? null : new Date().toISOString()
                 }
             };
+        }
 
         case 'UPDATE_SESSION_REQUIREMENT':
             return {
@@ -348,4 +356,5 @@ export function PlannerProvider({ children }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const usePlanner = () => useContext(PlannerContext);

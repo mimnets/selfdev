@@ -90,17 +90,15 @@ function AuthenticatedApp() {
     return <Auth />;
   }
 
-  return (
-    <PlannerProvider>
-      <AppContent />
-    </PlannerProvider>
-  );
+  return <AppContent />;
 }
 
 function App() {
   return (
     <SupabaseProvider>
-      <AuthenticatedApp />
+      <PlannerProvider>
+        <AuthenticatedApp />
+      </PlannerProvider>
     </SupabaseProvider>
   );
 }

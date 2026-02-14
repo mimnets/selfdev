@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePlanner } from '../context/PlannerContext';
 import { Bell, X, Check } from 'lucide-react';
-import { format, parseISO, isAfter } from 'date-fns';
+import { parseISO, isAfter } from 'date-fns';
 
 const NotificationManager = () => {
     const { state, acknowledgeReminder, toggleCompleted } = usePlanner();

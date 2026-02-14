@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Play, Clock, CheckCircle2, Circle, Bell, FileText, Send, ChevronRight } from 'lucide-react';
 import { usePlanner } from '../context/PlannerContext';
 import { categorizeActivity } from '../utils/categorizer';
-import { format, parseISO, subMinutes, addMinutes, startOfHour, addHours, differenceInMinutes, isBefore } from 'date-fns';
+import { format, parseISO, subMinutes, addMinutes, differenceInMinutes } from 'date-fns';
 import { formatDuration } from '../utils/theme';
 
 const AddActivityModal = ({ onClose, initialData = null }) => {
@@ -24,34 +24,29 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
     const [title, setTitle] = useState(initialData?.isGap ? '' : (initialData?.title || ''));
     const [category, setCategory] = useState(initialData?.category || 'good');
     const [description, setDescription] = useState(initialData?.isGap ? '' : (initialData?.description || ''));
-    const [completed, setCompleted] = useState(initialData?.completed || false);
     const [context, setContext] = useState(initialData?.context || 'personal');
     const [autoDetected, setAutoDetected] = useState(false);
-    const [showCategoryList, setShowCategoryList] = useState(false);
+    const completed = initialData?.completed || false;
 
     const formatForInput = (isoString) => isoString ? format(parseISO(isoString), "yyyy-MM-dd'T'HH:mm") : '';
     const [startTime, setStartTime] = useState(initialData?.startTime ? formatForInput(initialData.startTime) : '');
     const [endTime, setEndTime] = useState(initialData?.endTime ? formatForInput(initialData.endTime) : '');
 
     // Duration calculation for retro mode
-    const [durationText, setDurationText] = useState('');
-    useEffect(() => {
+    const durationText = useMemo(() => {
         if (mode === 'retro' && startTime && endTime) {
             try {
                 const start = parseISO(startTime);
                 const end = parseISO(endTime);
                 const diff = differenceInMinutes(end, start);
                 if (diff > 0) {
-                    setDurationText(formatDuration(diff * 60));
-                } else {
-                    setDurationText('');
+                    return formatDuration(diff * 60);
                 }
-            } catch (e) {
-                setDurationText('');
+            } catch {
+                return '';
             }
-        } else {
-            setDurationText('');
         }
+        return '';
     }, [startTime, endTime, mode]);
 
     const handlePresetTime = (type, minutes, isRemind = false) => {
@@ -80,15 +75,16 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
 
     // Auto-cat logic
     useEffect(() => {
-        if (title.length > 2) {
+        if (title.length > 2 && !autoDetected) {
             const combinedText = `${title} ${description}`;
             const detected = categorizeActivity(combinedText, state.customRules, state.categories);
             if (detected && detected !== category) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setCategory(detected);
                 setAutoDetected(true);
             }
         }
-    }, [title, description, state.customRules, state.categories]);
+    }, [title, description, state.customRules, state.categories, category, autoDetected]);
 
     const handleCategorySelect = (cat) => {
         setCategory(cat);

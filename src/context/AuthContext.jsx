@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useGoogleLogin, googleLogout } from '@react-oauth/google';
 import axios from 'axios';
 import { usePlanner } from './PlannerContext';
@@ -10,7 +10,7 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(null); // Access Token
     const [isSyncing, setIsSyncing] = useState(false);
     const [lastSynced, setLastSynced] = useState(null);
-    const { state, addRetroactive, stopActivity } = usePlanner(); // To inject data on restore
+    const { state } = usePlanner(); // To inject data on restore
 
     // Persist Login
     useEffect(() => {
@@ -135,7 +135,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const backupData = async () => {
+    const backupData = useCallback(async () => {
         if (!token) return;
         setIsSyncing(true);
 
@@ -191,7 +191,7 @@ export const AuthProvider = ({ children }) => {
         } finally {
             setIsSyncing(false);
         }
-    };
+    }, [token, state, rootFolderId, logout, findOrCreateFolder]);
 
     const restoreData = async () => {
         if (!token) return;
@@ -287,7 +287,7 @@ export const AuthProvider = ({ children }) => {
         }, 5000); // 5 second debounce
 
         return () => clearTimeout(timer);
-    }, [state, autoBackup, user]); // Depend on entire state for robust auto-backup
+    }, [state, autoBackup, user, backupData]); // Depend on entire state for robust auto-backup
 
     // Update findOrCreateFolder to use rootFolderId if selected
     const findOrCreateFolder = async (accessToken) => {
@@ -339,4 +339,5 @@ export const AuthProvider = ({ children }) => {
     );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

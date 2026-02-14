@@ -450,7 +450,7 @@ const Analysis = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredActivities.map((act, i) => (
+                                {filteredActivities.map((act) => (
                                     <tr key={act.id} style={{ borderTop: '1px solid #222' }}>
                                         <td style={tableCellStyle}>{format(parseISO(act.startTime), 'hh:mm a')}</td>
                                         <td style={tableCellStyle}>

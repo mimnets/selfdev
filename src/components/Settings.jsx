@@ -5,8 +5,7 @@ import { User, LogOut, Cloud, Download, Upload, ShieldCheck, Briefcase, Graduati
 
 const Settings = () => {
     const { state, updateSessionRequirement, setTheme } = usePlanner();
-    const { members, currentMemberId, sessionRequirements } = state;
-    const currentMember = members.find(m => m.id === currentMemberId) || members[0];
+    const { currentMemberId, sessionRequirements } = state;
     const requirement = sessionRequirements[currentMemberId] || { dailyTarget: 8, label: currentMemberId === 'me' ? 'Work' : 'School' };
 
     const {
