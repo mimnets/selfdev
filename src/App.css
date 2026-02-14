@@ -1,0 +1,91 @@
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(0, 255, 136, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 136, 0);
+  }
+}
+
+.timeline-line {
+  background: linear-gradient(to bottom, #333 0%, #333 50%, transparent 100%);
+}
+
+@media print {
+
+  /* HIDE app UI elements marked as no-print */
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  /* SHOW print-only elements */
+  .only-print {
+    display: block !important;
+  }
+
+  /* Position content at the top of the page */
+  body,
+  html,
+  #root,
+  .App {
+    background: #fff !important;
+    color: #000 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Force background colors to print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Table styling for print */
+  .ledger-table {
+    border: 1px solid #000 !important;
+    width: 100% !important;
+    border-collapse: collapse !important;
+    background: #fff !important;
+  }
+
+  .ledger-table th {
+    background: #2f5b4e !important;
+    color: #fff !important;
+    border: 1px solid #000 !important;
+    padding: 8px !important;
+  }
+
+  .ledger-table td {
+    color: #000 !important;
+    border: 1px solid #ddd !important;
+    background: transparent !important;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  span,
+  div {
+    color: #000 !important;
+  }
+}
+
+.only-print {
+  display: none;
+}
+
+.no-print {
+  /* This class is used for print visibility and does not require screen styles. */
+  visibility: visible;
+}

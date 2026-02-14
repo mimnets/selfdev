@@ -1,0 +1,133 @@
+:root,
+[data-theme='dark'] {
+  --color-bg: #050505;
+  --color-card-bg: #111111;
+  --color-card-border: #222222;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #888888;
+  --color-accent: #00ff88;
+  --color-shadow: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='light'] {
+  --color-bg: #f8fafc;
+  --color-card-bg: #ffffff;
+  --color-card-border: #e2e8f0;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #64748b;
+  --color-accent: #10b981;
+  --color-shadow: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='midnight'] {
+  --color-bg: #0f172a;
+  --color-card-bg: #1e293b;
+  --color-card-border: #334155;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-accent: #38bdf8;
+  --color-shadow: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='paper'] {
+  --color-bg: #fdfaf6;
+  --color-card-bg: #ffffff;
+  --color-card-border: #e8e2d4;
+  --color-text-primary: #433422;
+  --color-text-secondary: #8b7355;
+  --color-accent: #d97706;
+  --color-shadow: rgba(67, 52, 34, 0.05);
+}
+
+:root {
+  --color-elite: #00ff88;
+  --color-good: #4ade80;
+  --color-better: #facc15;
+  --color-improving: #60a5fa;
+  --color-nothing: #ef4444;
+  --font-main: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-bg);
+}
+
+body {
+  color: var(--color-text-primary);
+  font-family: var(--font-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 50px var(--color-shadow);
+  background-color: var(--color-bg);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-text-secondary);
+  opacity: 0.3;
+  border-radius: 3px;
+}
+
+/* Utilities */
+.glass-panel {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 16px;
+}
+
+.text-elite {
+  color: var(--color-elite);
+}
+
+.text-good {
+  color: var(--color-good);
+}
+
+.text-better {
+  color: var(--color-better);
+}
+
+.text-improving {
+  color: var(--color-improving);
+}
+
+.text-nothing {
+  color: var(--color-nothing);
+}
+
+.glow-elite {
+  box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+}
+
+.glow-good {
+  box-shadow: 0 0 15px rgba(74, 222, 128, 0.3);
+}
