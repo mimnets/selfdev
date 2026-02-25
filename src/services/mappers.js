@@ -151,7 +151,7 @@ export function settingsFromDb(row) {
         sessionTypes: row.session_types || migrateSessionRequirements(row.session_requirements) || {},
         acknowledgedReminders: row.acknowledged_reminders || [],
         customRules: row.custom_rules || {},
-        parentPin: row.parent_pin || null,
+        parentPin: row.parent_pin ?? null,
     };
 }
 

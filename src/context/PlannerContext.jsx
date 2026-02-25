@@ -75,6 +75,8 @@ function plannerReducer(state, action) {
                 ...action.payload,
                 // Preserve currentActivities from localStorage (ephemeral state)
                 currentActivities: action.payload.currentActivities || state.currentActivities,
+                // Preserve parentPin - use PocketBase value if available, else keep localStorage value
+                parentPin: action.payload.parentPin ?? state.parentPin ?? null,
             };
         }
 
@@ -515,6 +517,12 @@ export function PlannerProvider({ children }) {
                     : initialState.categories;
                 const appGoals = dbGoals.map(g => goalFromDb(g, idMap));
                 const appSettings = settingsFromDb(dbSettings);
+                console.log('[PlannerContext] Loaded from PocketBase:', {
+                    members: appMembers.length,
+                    activities: appActivities.length,
+                    parentPin: !!appSettings.parentPin,
+                    currentMemberIdFromDb: dbSettings?.current_member_id,
+                });
 
                 // Determine current member ID
                 let currentMemberId = 'me';

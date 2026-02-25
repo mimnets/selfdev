@@ -160,6 +160,7 @@ Click **Save**.
 | `session_types` | **JSON** | Required: OFF |
 | `acknowledged_reminders` | **JSON** | Required: OFF |
 | `custom_rules` | **JSON** | Required: OFF |
+| `parent_pin` | **Plain text** | Required: OFF |
 
 **JSON Field Details:**
 
