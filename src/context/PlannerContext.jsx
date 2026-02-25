@@ -1,5 +1,18 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import { createContext, useContext, useReducer, useEffect, useState, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { usePocketBase } from './SupabaseContext';
+import { db } from '../services/database';
+import { syncAction, setSyncStatusCallback, setMemberIdMap } from '../services/sync';
+import {
+    activityFromDb,
+    memberFromDb,
+    memberToDb,
+    categoriesFromDb,
+    categoriesToDb,
+    goalFromDb,
+    settingsFromDb,
+    buildMemberIdMap,
+} from '../services/mappers';
 
 const PlannerContext = createContext();
 
@@ -30,16 +43,42 @@ const initialState = {
     currentMemberId: 'me',
     goals: [],
     acknowledgedReminders: [],
-    activeSessions: {}, // { memberId: startTime or null }
-    sessionRequirements: {
-        'me': { dailyTarget: 8, label: 'Work' }
+    activeSessions: {},
+    sessionTypes: {
+        'me': [{ id: 'st-default', label: 'Work', dailyTarget: 8, color: '#3b82f6', icon: 'briefcase' }]
     },
-    theme: 'dark'
+    theme: 'midnight',
+    parentPin: null
 };
+
+// Migrate old sessionRequirements format to new sessionTypes format
+function migrateOldSessionRequirements(old) {
+    if (!old || Object.keys(old).length === 0) return null;
+    const migrated = {};
+    for (const [memberId, req] of Object.entries(old)) {
+        migrated[memberId] = [{
+            id: 'st-migrated',
+            label: req.label || 'Work',
+            dailyTarget: req.dailyTarget || 8,
+            color: '#3b82f6',
+            icon: 'briefcase',
+        }];
+    }
+    return migrated;
+}
 
 function plannerReducer(state, action) {
     switch (action.type) {
-        case 'START_ACTIVITY':
+        case 'LOAD_STATE': {
+            return {
+                ...state,
+                ...action.payload,
+                // Preserve currentActivities from localStorage (ephemeral state)
+                currentActivities: action.payload.currentActivities || state.currentActivities,
+            };
+        }
+
+        case 'START_ACTIVITY': {
             const currentMemberIdStart = state.currentMemberId;
             let completedActivity = null;
             if (state.currentActivities[currentMemberIdStart]) {
@@ -70,27 +109,18 @@ function plannerReducer(state, action) {
                     [currentMemberIdStart]: newActivity
                 }
             };
+        }
 
         case 'ADD_NOTE':
-        case 'ADD_REMINDER':
-            // Treat these as completed activities (point in time or future) 
-            // OR separate list? User said "list of activities - remainder, notes, Live"
-            // Reminders: "time and date"
-            // Notes: "record will be saved as notes"
-            // For simplicity, let's treat them as activities with specific types
-
-            // If Reminder, it might rely on external logic to actually "remind", 
-            // but for now we just store it.
+        case 'ADD_REMINDER': {
             const item = {
                 id: uuidv4(),
                 memberId: state.currentMemberId,
-                ...action.payload, // title, category, description, type, startTime, endTime(for reminder?)
+                ...action.payload,
                 startTime: action.payload.startTime || new Date().toISOString(),
-                completed: false, // Default to incomplete
-                // Reminders might have a future startTime
+                completed: false,
             };
 
-            // Sort needed?
             const updatedActivities = [item, ...state.activities].sort((a, b) =>
                 new Date(b.startTime) - new Date(a.startTime)
             );
@@ -99,9 +129,9 @@ function plannerReducer(state, action) {
                 ...state,
                 activities: updatedActivities
             };
+        }
 
         case 'LEARN_RULE':
-            // payload: { keyword, category }
             return {
                 ...state,
                 customRules: {
@@ -110,7 +140,7 @@ function plannerReducer(state, action) {
                 }
             };
 
-        case 'STOP_ACTIVITY':
+        case 'STOP_ACTIVITY': {
             const currentMemStop = state.currentMemberId;
             if (!state.currentActivities[currentMemStop]) return state;
             const stoppedActivity = {
@@ -125,16 +155,33 @@ function plannerReducer(state, action) {
                     [currentMemStop]: null
                 }
             };
+        }
 
-        case 'ADD_RETROACTIVE':
-            // Insert activity into history based on provided start/end times
-            // sophisticated logic needed here to sort/handle overlaps, simplified for now
+        case 'RESOLVE_STALE_ACTIVITY': {
+            // Stop a stale activity with a specific endTime (not "now")
+            const { memberId: staleMemberId, endTime: staleEndTime } = action.payload;
+            const staleActivity = state.currentActivities[staleMemberId];
+            if (!staleActivity) return state;
+            const resolvedActivity = {
+                ...staleActivity,
+                endTime: staleEndTime
+            };
+            return {
+                ...state,
+                activities: [resolvedActivity, ...state.activities],
+                currentActivities: {
+                    ...state.currentActivities,
+                    [staleMemberId]: null
+                }
+            };
+        }
+
+        case 'ADD_RETROACTIVE': {
             const retroActivity = {
                 id: uuidv4(),
                 memberId: state.currentMemberId,
-                ...action.payload // includes startTime, endTime
+                ...action.payload
             };
-            // Sort activities desc by startTime
             const newActivities = [retroActivity, ...state.activities].sort((a, b) =>
                 new Date(b.startTime) - new Date(a.startTime)
             );
@@ -142,17 +189,16 @@ function plannerReducer(state, action) {
                 ...state,
                 activities: newActivities
             };
+        }
 
-        case 'UPDATE_ACTIVITY':
+        case 'UPDATE_ACTIVITY': {
             const { id, updates } = action.payload;
 
-            // customized update logic if needed
             const updatedList = state.activities.map(act =>
                 act.id === id ? { ...act, ...updates } : act
             );
 
-            // Also check currentActivity if it's the one being updated
-            let updatedCurrents = { ...state.currentActivities };
+            const updatedCurrents = { ...state.currentActivities };
             Object.keys(updatedCurrents).forEach(mId => {
                 if (updatedCurrents[mId] && updatedCurrents[mId].id === id) {
                     updatedCurrents[mId] = { ...updatedCurrents[mId], ...updates };
@@ -164,12 +210,31 @@ function plannerReducer(state, action) {
                 activities: updatedList,
                 currentActivities: updatedCurrents
             };
+        }
 
         case 'ADD_MEMBER':
             return {
                 ...state,
                 members: [...state.members, { ...action.payload, id: uuidv4() }]
             };
+
+        case 'UPDATE_MEMBER': {
+            const { id: umId, updates: umUpdates } = action.payload;
+            return {
+                ...state,
+                members: state.members.map(m => m.id === umId ? { ...m, ...umUpdates } : m)
+            };
+        }
+
+        case 'DELETE_MEMBER': {
+            const dmId = action.payload;
+            if (dmId === 'me') return state; // Cannot delete primary member
+            return {
+                ...state,
+                members: state.members.filter(m => m.id !== dmId),
+                currentMemberId: state.currentMemberId === dmId ? 'me' : state.currentMemberId
+            };
+        }
 
         case 'SWITCH_MEMBER':
             return {
@@ -201,11 +266,11 @@ function plannerReducer(state, action) {
                 acknowledgedReminders: [...(state.acknowledgedReminders || []), action.payload]
             };
 
-        case 'TOGGLE_COMPLETED':
-            let updatedActs = (state.activities || []).map(act =>
+        case 'TOGGLE_COMPLETED': {
+            const updatedActs = (state.activities || []).map(act =>
                 act.id === action.payload ? { ...act, completed: !act.completed } : act
             );
-            let updatedCurrentsToggle = { ...state.currentActivities };
+            const updatedCurrentsToggle = { ...state.currentActivities };
             Object.keys(updatedCurrentsToggle).forEach(mId => {
                 if (updatedCurrentsToggle[mId] && updatedCurrentsToggle[mId].id === action.payload) {
                     updatedCurrentsToggle[mId] = { ...updatedCurrentsToggle[mId], completed: !updatedCurrentsToggle[mId].completed };
@@ -217,6 +282,7 @@ function plannerReducer(state, action) {
                 activities: updatedActs,
                 currentActivities: updatedCurrentsToggle
             };
+        }
 
         case 'ADD_CATEGORY':
             return {
@@ -239,41 +305,92 @@ function plannerReducer(state, action) {
                 }
             };
 
-        case 'DELETE_CATEGORY':
+        case 'DELETE_CATEGORY': {
             const newCats = { ...state.categories };
             delete newCats[action.payload];
             return {
                 ...state,
                 categories: newCats
             };
+        }
 
-        case 'TOGGLE_SESSION':
-            const memberId = action.payload;
-            const currentSessionStart = state.activeSessions[memberId];
+        case 'TOGGLE_SESSION': {
+            const { memberId, sessionTypeId } = action.payload;
+            const currentSession = state.activeSessions[memberId];
+            // If already active with this type (or any type if no id given), turn off
+            if (currentSession) {
+                return {
+                    ...state,
+                    activeSessions: { ...state.activeSessions, [memberId]: null }
+                };
+            }
+            // Turn on with the specified session type
+            const memberTypes = state.sessionTypes[memberId] || [];
+            const typeId = sessionTypeId || (memberTypes[0]?.id);
             return {
                 ...state,
                 activeSessions: {
                     ...state.activeSessions,
-                    [memberId]: currentSessionStart ? null : new Date().toISOString()
+                    [memberId]: { sessionTypeId: typeId, startedAt: new Date().toISOString() }
                 }
             };
+        }
 
-        case 'UPDATE_SESSION_REQUIREMENT':
+        case 'ADD_SESSION_TYPE': {
+            const { memberId: stMemberId, sessionType } = action.payload;
+            const existing = state.sessionTypes[stMemberId] || [];
             return {
                 ...state,
-                sessionRequirements: {
-                    ...state.sessionRequirements,
-                    [action.payload.memberId]: {
-                        ...state.sessionRequirements[action.payload.memberId],
-                        ...action.payload.updates
-                    }
+                sessionTypes: {
+                    ...state.sessionTypes,
+                    [stMemberId]: [...existing, { ...sessionType, id: sessionType.id || uuidv4() }]
                 }
             };
+        }
+
+        case 'UPDATE_SESSION_TYPE': {
+            const { memberId: utMemberId, sessionTypeId: utId, updates: utUpdates } = action.payload;
+            const memberSessions = state.sessionTypes[utMemberId] || [];
+            return {
+                ...state,
+                sessionTypes: {
+                    ...state.sessionTypes,
+                    [utMemberId]: memberSessions.map(st =>
+                        st.id === utId ? { ...st, ...utUpdates } : st
+                    )
+                }
+            };
+        }
+
+        case 'DELETE_SESSION_TYPE': {
+            const { memberId: dtMemberId, sessionTypeId: dtId } = action.payload;
+            const dtSessions = state.sessionTypes[dtMemberId] || [];
+            // Also deactivate if this type was active
+            const activeSession = state.activeSessions[dtMemberId];
+            const newActiveSessions = { ...state.activeSessions };
+            if (activeSession && activeSession.sessionTypeId === dtId) {
+                newActiveSessions[dtMemberId] = null;
+            }
+            return {
+                ...state,
+                sessionTypes: {
+                    ...state.sessionTypes,
+                    [dtMemberId]: dtSessions.filter(st => st.id !== dtId)
+                },
+                activeSessions: newActiveSessions
+            };
+        }
 
         case 'SET_THEME':
             return {
                 ...state,
                 theme: action.payload
+            };
+
+        case 'SET_PARENT_PIN':
+            return {
+                ...state,
+                parentPin: action.payload
             };
 
         default:
@@ -282,36 +399,166 @@ function plannerReducer(state, action) {
 }
 
 export function PlannerProvider({ children }) {
-    const [state, dispatch] = useReducer(plannerReducer, initialState, (initial) => {
-        // Load from local storage
+    const { user } = usePocketBase();
+    const [syncStatus, setSyncStatus] = useState('synced'); // 'synced' | 'syncing' | 'offline'
+    const [dataLoaded, setDataLoaded] = useState(false);
+    const memberIdMapRef = useRef({});
+
+    const [state, baseDispatch] = useReducer(plannerReducer, initialState, (initial) => {
+        // Load from localStorage as fast cache
         const saved = localStorage.getItem('planner-state');
         if (saved) {
-            const loaded = JSON.parse(saved);
-            // Merge with initial to ensure new fields (like customRules) exist
-            return {
-                ...initial,
-                ...loaded,
-                customRules: loaded.customRules || initial.customRules || {},
-                members: loaded.members || initial.members,
-                currentMemberId: loaded.currentMemberId || initial.currentMemberId,
-                goals: loaded.goals || initial.goals || [],
-                acknowledgedReminders: loaded.acknowledgedReminders || initial.acknowledgedReminders || [],
-                categories: loaded.categories || initial.categories,
-                currentActivities: loaded.currentActivities || (loaded.currentActivity ? { [loaded.currentMemberId]: loaded.currentActivity } : {}),
-                activeSessions: loaded.activeSessions || {},
-                sessionRequirements: loaded.sessionRequirements || initial.sessionRequirements,
-                theme: loaded.theme || initial.theme
-            };
+            try {
+                const loaded = JSON.parse(saved);
+                return {
+                    ...initial,
+                    ...loaded,
+                    customRules: loaded.customRules || initial.customRules || {},
+                    members: loaded.members || initial.members,
+                    currentMemberId: loaded.currentMemberId || initial.currentMemberId,
+                    goals: loaded.goals || initial.goals || [],
+                    acknowledgedReminders: loaded.acknowledgedReminders || initial.acknowledgedReminders || [],
+                    categories: loaded.categories || initial.categories,
+                    currentActivities: loaded.currentActivities || (loaded.currentActivity ? { [loaded.currentMemberId]: loaded.currentActivity } : {}),
+                    activeSessions: loaded.activeSessions || {},
+                    sessionTypes: loaded.sessionTypes || migrateOldSessionRequirements(loaded.sessionRequirements) || initial.sessionTypes,
+                    theme: loaded.theme || initial.theme,
+                    parentPin: loaded.parentPin || null
+                };
+            } catch (e) {
+                console.error('Failed to parse planner state from localStorage', e);
+                return initial;
+            }
         }
         return initial;
     });
 
+    // Set up sync status callback
+    useEffect(() => {
+        setSyncStatusCallback(setSyncStatus);
+    }, []);
+
+    // Wrapping dispatch to also trigger background sync
+    const stateRef = useRef(state);
+    stateRef.current = state;
+
+    const dispatch = useCallback((action) => {
+        baseDispatch(action);
+        // After dispatch, sync to PocketBase if user is authenticated
+        // We use a microtask to ensure the reducer has processed first
+        if (user && action.type !== 'LOAD_STATE') {
+            // Use requestAnimationFrame to get the updated state after reducer runs
+            requestAnimationFrame(() => {
+                syncAction(action, stateRef.current);
+            });
+        }
+    }, [user]);
+
+    // Write-through to localStorage (existing behavior, kept for offline cache)
     useEffect(() => {
         localStorage.setItem('planner-state', JSON.stringify(state));
     }, [state]);
 
+    // Load data from PocketBase when user becomes available
+    useEffect(() => {
+        if (!user) {
+            setDataLoaded(false);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadFromPocketBase = async () => {
+            try {
+                setSyncStatus('syncing');
+
+                // Fetch all data in parallel
+                const [dbMembers, dbActivities, dbCategories, dbGoals, dbSettings] = await Promise.all([
+                    db.getMembers(),
+                    db.getActivities(),
+                    db.getCategories(),
+                    db.getGoals(),
+                    db.getSettings(),
+                ]);
+
+                if (cancelled) return;
+
+                // Handle first-time user: seed "Me" member if none exists
+                let members = dbMembers;
+                if (members.length === 0) {
+                    const meMember = await db.createMember(memberToDb({ name: 'Me', role: 'admin', color: '#00ff88' }));
+                    members = [meMember];
+
+                    // Also seed default categories
+                    const defaultCats = categoriesToDb(initialState.categories);
+                    await db.bulkUpsertCategories(defaultCats);
+                }
+
+                // Build member ID map
+                const idMap = buildMemberIdMap(members);
+                memberIdMapRef.current = idMap;
+                setMemberIdMap(idMap);
+
+                // Transform DB → app format
+                const appMembers = members.map(m => {
+                    const appMember = memberFromDb(m);
+                    // If this is the primary member, use 'me' as the app ID
+                    if (m.role === 'me') {
+                        return { ...appMember, id: 'me' };
+                    }
+                    return appMember;
+                });
+
+                const appActivities = dbActivities.map(a => activityFromDb(a, idMap));
+                const appCategories = dbCategories.length > 0
+                    ? categoriesFromDb(dbCategories)
+                    : initialState.categories;
+                const appGoals = dbGoals.map(g => goalFromDb(g, idMap));
+                const appSettings = settingsFromDb(dbSettings);
+
+                // Determine current member ID
+                let currentMemberId = 'me';
+                if (dbSettings?.current_member_id) {
+                    // Reverse-lookup the app ID
+                    for (const [appId, dbId] of Object.entries(idMap)) {
+                        if (dbId === dbSettings.current_member_id) {
+                            currentMemberId = appId;
+                            break;
+                        }
+                    }
+                }
+
+                if (cancelled) return;
+
+                baseDispatch({
+                    type: 'LOAD_STATE',
+                    payload: {
+                        members: appMembers,
+                        activities: appActivities,
+                        categories: appCategories,
+                        goals: appGoals,
+                        currentMemberId,
+                        ...appSettings,
+                    }
+                });
+
+                setDataLoaded(true);
+                setSyncStatus('synced');
+            } catch (err) {
+                console.error('[PlannerContext] Failed to load from PocketBase, using localStorage:', err);
+                setSyncStatus('offline');
+                setDataLoaded(true); // Still mark loaded so UI isn't blocked
+            }
+        };
+
+        loadFromPocketBase();
+
+        return () => { cancelled = true; };
+    }, [user]);
+
     const startActivity = (details) => dispatch({ type: 'START_ACTIVITY', payload: details });
     const stopActivity = () => dispatch({ type: 'STOP_ACTIVITY' });
+    const resolveStaleActivity = (memberId, endTime) => dispatch({ type: 'RESOLVE_STALE_ACTIVITY', payload: { memberId, endTime } });
     const addRetroactive = (activity) => dispatch({ type: 'ADD_RETROACTIVE', payload: activity });
     const addNote = (note) => dispatch({ type: 'ADD_NOTE', payload: { ...note, type: 'note' } });
     const addReminder = (reminder) => dispatch({ type: 'ADD_REMINDER', payload: { ...reminder, type: 'reminder' } });
@@ -320,6 +567,8 @@ export function PlannerProvider({ children }) {
     const learnRule = (keyword, category) => dispatch({ type: 'LEARN_RULE', payload: { keyword, category } });
     const updateActivity = (id, updates) => dispatch({ type: 'UPDATE_ACTIVITY', payload: { id, updates } });
     const addMember = (member) => dispatch({ type: 'ADD_MEMBER', payload: member });
+    const updateMember = (id, updates) => dispatch({ type: 'UPDATE_MEMBER', payload: { id, updates } });
+    const deleteMember = (id) => dispatch({ type: 'DELETE_MEMBER', payload: id });
     const switchMember = (id) => dispatch({ type: 'SWITCH_MEMBER', payload: id });
     const addGoal = (goal) => dispatch({ type: 'ADD_GOAL', payload: goal });
     const updateGoal = (id, updates) => dispatch({ type: 'UPDATE_GOAL', payload: { id, updates } });
@@ -327,18 +576,22 @@ export function PlannerProvider({ children }) {
     const addCategory = (id, data) => dispatch({ type: 'ADD_CATEGORY', payload: { id, data } });
     const updateCategory = (id, updates) => dispatch({ type: 'UPDATE_CATEGORY', payload: { id, updates } });
     const deleteCategory = (id) => dispatch({ type: 'DELETE_CATEGORY', payload: id });
-    const toggleSession = (memberId) => dispatch({ type: 'TOGGLE_SESSION', payload: memberId });
-    const updateSessionRequirement = (memberId, updates) => dispatch({ type: 'UPDATE_SESSION_REQUIREMENT', payload: { memberId, updates } });
+    const toggleSession = (memberId, sessionTypeId) => dispatch({ type: 'TOGGLE_SESSION', payload: { memberId, sessionTypeId } });
+    const addSessionType = (memberId, sessionType) => dispatch({ type: 'ADD_SESSION_TYPE', payload: { memberId, sessionType } });
+    const updateSessionType = (memberId, sessionTypeId, updates) => dispatch({ type: 'UPDATE_SESSION_TYPE', payload: { memberId, sessionTypeId, updates } });
+    const deleteSessionType = (memberId, sessionTypeId) => dispatch({ type: 'DELETE_SESSION_TYPE', payload: { memberId, sessionTypeId } });
     const setTheme = (themeName) => dispatch({ type: 'SET_THEME', payload: themeName });
+    const setParentPin = (pin) => dispatch({ type: 'SET_PARENT_PIN', payload: pin });
 
     const contextValue = {
         state: {
             ...state,
             currentActivity: state.currentActivities[state.currentMemberId] || null
         },
-        startActivity, stopActivity, addRetroactive, addNote, addReminder, acknowledgeReminder, toggleCompleted,
-        learnRule, updateActivity, addMember, switchMember, addGoal, updateGoal, deleteGoal,
-        addCategory, updateCategory, deleteCategory, toggleSession, updateSessionRequirement, setTheme
+        syncStatus,
+        startActivity, stopActivity, resolveStaleActivity, addRetroactive, addNote, addReminder, acknowledgeReminder, toggleCompleted,
+        learnRule, updateActivity, addMember, updateMember, deleteMember, switchMember, addGoal, updateGoal, deleteGoal,
+        addCategory, updateCategory, deleteCategory, toggleSession, addSessionType, updateSessionType, deleteSessionType, setTheme, setParentPin
     };
 
     return (
@@ -348,4 +601,10 @@ export function PlannerProvider({ children }) {
     );
 }
 
-export const usePlanner = () => useContext(PlannerContext);
+export const usePlanner = () => {
+    const context = useContext(PlannerContext);
+    if (!context) {
+        throw new Error('usePlanner must be used within a PlannerProvider');
+    }
+    return context;
+};

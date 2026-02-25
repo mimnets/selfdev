@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Play, Clock, CheckCircle2, Circle, Bell, FileText, Send, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { X, Play, Clock, Bell, FileText, ChevronRight, Search } from 'lucide-react';
 import { usePlanner } from '../context/PlannerContext';
 import { categorizeActivity } from '../utils/categorizer';
-import { format, parseISO, subMinutes, addMinutes, startOfHour, addHours, differenceInMinutes, isBefore } from 'date-fns';
+import { format, parseISO, subMinutes, addMinutes, differenceInMinutes } from 'date-fns';
 import { formatDuration } from '../utils/theme';
 
 const AddActivityModal = ({ onClose, initialData = null }) => {
@@ -24,34 +24,29 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
     const [title, setTitle] = useState(initialData?.isGap ? '' : (initialData?.title || ''));
     const [category, setCategory] = useState(initialData?.category || 'good');
     const [description, setDescription] = useState(initialData?.isGap ? '' : (initialData?.description || ''));
-    const [completed, setCompleted] = useState(initialData?.completed || false);
+    const [completed] = useState(initialData?.completed || false);
     const [context, setContext] = useState(initialData?.context || 'personal');
     const [autoDetected, setAutoDetected] = useState(false);
-    const [showCategoryList, setShowCategoryList] = useState(false);
 
     const formatForInput = (isoString) => isoString ? format(parseISO(isoString), "yyyy-MM-dd'T'HH:mm") : '';
     const [startTime, setStartTime] = useState(initialData?.startTime ? formatForInput(initialData.startTime) : '');
     const [endTime, setEndTime] = useState(initialData?.endTime ? formatForInput(initialData.endTime) : '');
 
     // Duration calculation for retro mode
-    const [durationText, setDurationText] = useState('');
-    useEffect(() => {
+    const durationText = useMemo(() => {
         if (mode === 'retro' && startTime && endTime) {
             try {
                 const start = parseISO(startTime);
                 const end = parseISO(endTime);
                 const diff = differenceInMinutes(end, start);
                 if (diff > 0) {
-                    setDurationText(formatDuration(diff * 60));
-                } else {
-                    setDurationText('');
+                    return formatDuration(diff * 60);
                 }
-            } catch (e) {
-                setDurationText('');
+            } catch {
+                // ignore parse errors
             }
-        } else {
-            setDurationText('');
         }
+        return '';
     }, [startTime, endTime, mode]);
 
     const handlePresetTime = (type, minutes, isRemind = false) => {
@@ -88,7 +83,7 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
                 setAutoDetected(true);
             }
         }
-    }, [title, description, state.customRules, state.categories]);
+    }, [title, description, state.customRules, state.categories, category]);
 
     const handleCategorySelect = (cat) => {
         setCategory(cat);
@@ -205,7 +200,7 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
                             outline: 'none',
                             transition: 'border-color 0.3s'
                         }}
-                        onKeyPress={(e) => e.key === 'Enter' && handleAction('live')}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAction('live')}
                     />
                     {autoDetected && (
                         <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: theme.color, opacity: 0.8 }}>
@@ -249,24 +244,13 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
                     <div style={{ animation: 'fadeIn 0.3s' }}>
 
                         {(mode === 'live' || mode === 'retro') && (
-                            <div style={{ marginBottom: '20px' }}>
-                                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
-                                    {Object.entries(state.categories || {}).filter(([id]) => id !== 'note' && id !== 'reminder').map(([id, cat]) => (
-                                        <button
-                                            key={id}
-                                            onClick={() => handleCategorySelect(id)}
-                                            style={{
-                                                padding: '6px 14px', borderRadius: '15px',
-                                                background: category === id ? cat?.color : '#222',
-                                                color: category === id ? '#000' : '#888',
-                                                border: 'none', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap'
-                                            }}
-                                        >
-                                            {cat?.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                            <CategoryPicker
+                                categories={state.categories}
+                                selected={category}
+                                onSelect={handleCategorySelect}
+                                activities={state.activities}
+                                currentMemberId={state.currentMemberId}
+                            />
                         )}
 
                         <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
@@ -400,10 +384,6 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
                 )}
             </div>
 
-            <style>{`
-                @keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-            `}</style>
         </div>
     );
 };
@@ -439,16 +419,267 @@ const ActionButton = ({ icon, label, color, onClick }) => (
     </button>
 );
 
-const TimeField = ({ label, value, onChange, fullWidth }) => (
-    <div style={{ flex: fullWidth ? 'none' : 1, width: fullWidth ? '100%' : 'auto', background: '#222', padding: '10px', borderRadius: '12px' }}>
-        <div style={{ fontSize: '9px', color: '#666', fontWeight: 'bold', marginBottom: '4px' }}>{label}</div>
-        <input
-            type="datetime-local"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            style={{ width: '100%', background: 'transparent', border: 'none', color: '#fff', fontSize: '13px', outline: 'none' }}
-        />
-    </div>
-);
+const CategoryPicker = ({ categories, selected, onSelect, activities, currentMemberId }) => {
+    const [search, setSearch] = useState('');
+    const [showAll, setShowAll] = useState(false);
+
+    // Count recent usage per category (last 50 activities for this member)
+    const usageCounts = useMemo(() => {
+        const counts = {};
+        const recent = (activities || [])
+            .filter(a => a.memberId === currentMemberId && a.type === 'activity')
+            .slice(0, 50);
+        for (const a of recent) {
+            if (a.category) counts[a.category] = (counts[a.category] || 0) + 1;
+        }
+        return counts;
+    }, [activities, currentMemberId]);
+
+    const allEntries = Object.entries(categories || {})
+        .filter(([id]) => id !== 'note' && id !== 'reminder');
+
+    // Sort: selected first, then by usage count (desc), then alphabetical
+    const sorted = [...allEntries].sort((a, b) => {
+        if (a[0] === selected) return -1;
+        if (b[0] === selected) return 1;
+        const countA = usageCounts[a[0]] || 0;
+        const countB = usageCounts[b[0]] || 0;
+        if (countA !== countB) return countB - countA;
+        return a[1].label.localeCompare(b[1].label);
+    });
+
+    // Filter by search
+    const filtered = search
+        ? sorted.filter(([, cat]) => cat.label.toLowerCase().includes(search.toLowerCase()))
+        : sorted;
+
+    // Show top 6 by default, all if expanded or searching
+    const visible = (showAll || search) ? filtered : filtered.slice(0, 6);
+    const hasMore = !showAll && !search && filtered.length > 6;
+
+    return (
+        <div style={{ marginBottom: '20px' }}>
+            {/* Search bar */}
+            <div style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: '#222', borderRadius: '10px', padding: '8px 12px', marginBottom: '12px'
+            }}>
+                <Search size={14} color="#666" />
+                <input
+                    type="text"
+                    placeholder="Search categories..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                        flex: 1, background: 'transparent', border: 'none',
+                        color: '#fff', fontSize: '13px', outline: 'none'
+                    }}
+                />
+                {search && (
+                    <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0 }}>
+                        <X size={14} />
+                    </button>
+                )}
+            </div>
+
+            {/* Category grid */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '8px'
+            }}>
+                {visible.map(([id, cat]) => {
+                    const isSelected = id === selected;
+                    const count = usageCounts[id] || 0;
+                    return (
+                        <button
+                            key={id}
+                            onClick={() => onSelect(id)}
+                            style={{
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                gap: '4px', padding: '10px 6px', borderRadius: '14px',
+                                background: isSelected ? cat.color : '#1a1a1a',
+                                border: isSelected ? 'none' : '1px solid #333',
+                                color: isSelected ? '#000' : '#ccc',
+                                cursor: 'pointer', transition: 'all 0.15s', position: 'relative'
+                            }}
+                        >
+                            <div style={{
+                                width: '10px', height: '10px', borderRadius: '50%',
+                                background: isSelected ? '#00000044' : cat.color,
+                            }} />
+                            <span style={{ fontSize: '10px', fontWeight: 'bold', textAlign: 'center', lineHeight: 1.2 }}>
+                                {cat.label}
+                            </span>
+                            {count > 0 && !isSelected && (
+                                <span style={{ fontSize: '8px', color: '#555' }}>{count}x</span>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Show more / less */}
+            {hasMore && (
+                <button
+                    onClick={() => setShowAll(true)}
+                    style={{
+                        width: '100%', marginTop: '8px', padding: '8px',
+                        background: 'transparent', border: '1px solid #333', borderRadius: '10px',
+                        color: '#888', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'
+                    }}
+                >
+                    Show all ({filtered.length - 6} more)
+                </button>
+            )}
+            {showAll && !search && (
+                <button
+                    onClick={() => setShowAll(false)}
+                    style={{
+                        width: '100%', marginTop: '8px', padding: '8px',
+                        background: 'transparent', border: '1px solid #333', borderRadius: '10px',
+                        color: '#888', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'
+                    }}
+                >
+                    Show less
+                </button>
+            )}
+
+            {filtered.length === 0 && (
+                <div style={{ textAlign: 'center', color: '#555', fontSize: '12px', padding: '12px' }}>
+                    No categories match "{search}"
+                </div>
+            )}
+        </div>
+    );
+};
+
+const TimeField = ({ label, value, onChange, fullWidth }) => {
+    const [open, setOpen] = useState(false);
+    const [tempDate, setTempDate] = useState('');
+    const [tempTime, setTempTime] = useState('');
+
+    const handleOpen = () => {
+        if (value) {
+            // value is "yyyy-MM-ddTHH:mm"
+            const [d, t] = value.split('T');
+            setTempDate(d || '');
+            setTempTime(t || '');
+        } else {
+            const now = new Date();
+            setTempDate(format(now, 'yyyy-MM-dd'));
+            setTempTime(format(now, 'HH:mm'));
+        }
+        setOpen(true);
+    };
+
+    const handleConfirm = () => {
+        if (tempDate && tempTime) {
+            onChange(`${tempDate}T${tempTime}`);
+        }
+        setOpen(false);
+    };
+
+    const displayText = value
+        ? format(parseISO(value), 'MMM d, hh:mm a')
+        : 'Tap to set';
+
+    return (
+        <div style={{ flex: fullWidth ? 'none' : 1, width: fullWidth ? '100%' : 'auto' }}>
+            <div
+                onClick={handleOpen}
+                style={{
+                    background: '#222', padding: '10px', borderRadius: '12px', cursor: 'pointer',
+                    border: value ? '1px solid #333' : '1px dashed #444'
+                }}
+            >
+                <div style={{ fontSize: '9px', color: '#666', fontWeight: 'bold', marginBottom: '4px' }}>{label}</div>
+                <div style={{ fontSize: '13px', color: value ? '#fff' : '#555' }}>{displayText}</div>
+            </div>
+
+            {open && (
+                <div
+                    style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.7)', zIndex: 400,
+                        display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+                    }}
+                    onClick={() => setOpen(false)}
+                >
+                    <div
+                        style={{
+                            background: '#1a1a1a', borderRadius: '20px 20px 0 0',
+                            width: '100%', maxWidth: '440px', padding: '20px 24px 28px',
+                            animation: 'slideUp 0.25s ease-out'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ width: '40px', height: '4px', background: '#444', borderRadius: '2px', margin: '0 auto 16px' }} />
+                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', marginBottom: '16px' }}>{label}</div>
+
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '10px', color: '#888', fontWeight: 'bold', marginBottom: '6px' }}>DATE</div>
+                                <input
+                                    type="date"
+                                    value={tempDate}
+                                    onChange={(e) => setTempDate(e.target.value)}
+                                    style={{
+                                        width: '100%', background: '#222', border: '1px solid #333',
+                                        borderRadius: '12px', padding: '12px', color: '#fff',
+                                        fontSize: '15px', outline: 'none', boxSizing: 'border-box'
+                                    }}
+                                />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '10px', color: '#888', fontWeight: 'bold', marginBottom: '6px' }}>TIME</div>
+                                <input
+                                    type="time"
+                                    value={tempTime}
+                                    onChange={(e) => setTempTime(e.target.value)}
+                                    style={{
+                                        width: '100%', background: '#222', border: '1px solid #333',
+                                        borderRadius: '12px', padding: '12px', color: '#fff',
+                                        fontSize: '15px', outline: 'none', boxSizing: 'border-box'
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button
+                                onClick={() => setOpen(false)}
+                                style={{
+                                    flex: 1, padding: '14px', borderRadius: '14px',
+                                    background: '#222', color: '#888', border: 'none',
+                                    fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirm}
+                                style={{
+                                    flex: 1, padding: '14px', borderRadius: '14px',
+                                    background: '#00ff88', color: '#000', border: 'none',
+                                    fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'
+                                }}
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <style>{`
+                @keyframes slideUp {
+                    from { transform: translateY(100%); }
+                    to { transform: translateY(0); }
+                }
+            `}</style>
+        </div>
+    );
+};
 
 export default AddActivityModal;

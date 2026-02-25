@@ -42,6 +42,8 @@ export const THEME = {
 };
 
 export const formatDuration = (totalSeconds) => {
+    if (totalSeconds < 0) totalSeconds = 0;
+    totalSeconds = Math.floor(totalSeconds);
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;

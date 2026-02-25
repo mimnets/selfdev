@@ -84,8 +84,8 @@ const ActivityCard = ({ activity, side, onClick }) => {
             {/* Card Content */}
             <div style={{
                 width: '42%',
-                background: activity.completed ? 'var(--color-accent)0d' : 'var(--color-card-bg)',
-                border: `1px solid ${activity.completed ? 'var(--color-accent)' : theme.color}33`,
+                background: activity.completed ? 'rgba(0, 255, 136, 0.05)' : 'var(--color-card-bg)',
+                border: `1px solid ${activity.completed ? 'rgba(0, 255, 136, 0.2)' : theme.color + '33'}`,
                 borderRadius: '16px',
                 padding: '12px',
                 marginLeft: isRight ? '20px' : 0,

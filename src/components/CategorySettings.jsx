@@ -9,7 +9,9 @@ const CategorySettings = ({ onClose }) => {
     const [editingId, setEditingId] = useState(null);
     const [newCatLabel, setNewCatLabel] = useState('');
     const [newCatColor, setNewCatColor] = useState('#00ff88');
+    const [justAddedId, setJustAddedId] = useState(null);
     const formRef = useRef(null);
+    const listEndRef = useRef(null);
 
     const handleSave = () => {
         if (!newCatLabel.trim()) return;
@@ -17,12 +19,21 @@ const CategorySettings = ({ onClose }) => {
         if (editingId) {
             updateCategory(editingId, { label: newCatLabel, color: newCatColor });
             setEditingId(null);
+            setNewCatLabel('');
+            setNewCatColor('#00ff88');
         } else {
             const id = newCatLabel.toLowerCase().replace(/\s+/g, '_');
             addCategory(id, { label: newCatLabel, color: newCatColor, icon: 'tag' });
+            setNewCatLabel('');
+            setNewCatColor('#00ff88');
+            setJustAddedId(id);
+            // Scroll to the new category and highlight it
+            setTimeout(() => {
+                listEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+            // Clear highlight after 2 seconds
+            setTimeout(() => setJustAddedId(null), 2500);
         }
-        setNewCatLabel('');
-        setNewCatColor('#00ff88');
     };
 
     const handleEdit = (id, cat) => {
@@ -102,15 +113,22 @@ const CategorySettings = ({ onClose }) => {
                 </div>
 
                 {/* List Area */}
-                <div style={{ display: 'grid', gap: '12px' }}>
+                <div style={{ display: 'grid', gap: '12px', paddingBottom: '24px' }}>
                     {Object.entries(categories).map(([id, cat]) => (
-                        <div key={id} style={{
+                        <div key={id} ref={id === justAddedId ? listEndRef : null} style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '12px 16px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid #222'
+                            padding: '12px 16px',
+                            background: id === justAddedId ? `${cat.color}22` : 'rgba(255,255,255,0.03)',
+                            borderRadius: '16px',
+                            border: id === justAddedId ? `1px solid ${cat.color}` : '1px solid #222',
+                            transition: 'all 0.3s ease'
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: cat.color, boxShadow: `0 0 10px ${cat.color}` }} />
                                 <span style={{ color: '#fff', fontWeight: '500' }}>{cat.label}</span>
+                                {id === justAddedId && (
+                                    <span style={{ fontSize: '10px', color: cat.color, fontWeight: 'bold' }}>Added!</span>
+                                )}
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button onClick={() => handleEdit(id, cat)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}><Edit2 size={16} /></button>

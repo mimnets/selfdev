@@ -4,7 +4,10 @@ import { useSupabase } from '../context/SupabaseContext';
 export const Auth = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const { signInWithGoogle } = useSupabase();
+    const [isSignUp, setIsSignUp] = useState(false);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const { signInWithGoogle, signIn, signUp } = useSupabase();
 
     const handleGoogleSignIn = async () => {
         try {
@@ -17,6 +20,35 @@ export const Auth = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleEmailAuth = async (e) => {
+        e.preventDefault();
+        try {
+            setLoading(true);
+            setError(null);
+            if (isSignUp) {
+                await signUp(email, password);
+            } else {
+                await signIn(email, password);
+            }
+        } catch (err) {
+            setError(err.message || err.response?.message || 'Authentication failed');
+            console.error('Auth error:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const inputStyle = {
+        width: '100%',
+        padding: '12px 16px',
+        fontSize: '14px',
+        border: '2px solid #ddd',
+        borderRadius: '8px',
+        outline: 'none',
+        transition: 'border-color 0.2s',
+        boxSizing: 'border-box',
     };
 
     return (
@@ -57,6 +89,7 @@ export const Auth = () => {
                     Track your time, achieve your goals
                 </p>
 
+                {/* Google OAuth Button */}
                 <button
                     onClick={handleGoogleSignIn}
                     disabled={loading}
@@ -96,6 +129,83 @@ export const Auth = () => {
                     </svg>
                     {loading ? 'Signing in...' : 'Continue with Google'}
                 </button>
+
+                {/* Divider */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    margin: '24px 0',
+                    gap: '12px'
+                }}>
+                    <div style={{ flex: 1, height: '1px', background: '#ddd' }} />
+                    <span style={{ color: '#999', fontSize: '13px' }}>or</span>
+                    <div style={{ flex: 1, height: '1px', background: '#ddd' }} />
+                </div>
+
+                {/* Email/Password Form */}
+                <form onSubmit={handleEmailAuth} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <input
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        disabled={loading}
+                        style={inputStyle}
+                        onFocus={(e) => e.target.style.borderColor = '#667eea'}
+                        onBlur={(e) => e.target.style.borderColor = '#ddd'}
+                    />
+                    <input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        disabled={loading}
+                        minLength={8}
+                        style={inputStyle}
+                        onFocus={(e) => e.target.style.borderColor = '#667eea'}
+                        onBlur={(e) => e.target.style.borderColor = '#ddd'}
+                    />
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        style={{
+                            width: '100%',
+                            padding: '14px 24px',
+                            fontSize: '16px',
+                            fontWeight: '600',
+                            color: 'white',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.2s',
+                            opacity: loading ? 0.6 : 1
+                        }}
+                    >
+                        {loading ? 'Please wait...' : isSignUp ? 'Sign Up' : 'Sign In'}
+                    </button>
+                </form>
+
+                {/* Toggle Sign In / Sign Up */}
+                <p style={{ marginTop: '16px', fontSize: '14px', color: '#666' }}>
+                    {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+                    <button
+                        onClick={() => { setIsSignUp(!isSignUp); setError(null); }}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#667eea',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            padding: 0,
+                        }}
+                    >
+                        {isSignUp ? 'Sign In' : 'Sign Up'}
+                    </button>
+                </p>
 
                 {error && (
                     <div style={{

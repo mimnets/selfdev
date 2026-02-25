@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { usePlanner } from '../context/PlannerContext';
 import ActivityCard from './ActivityCard';
 import AddActivityModal from './AddActivityModal';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
-import { isSameDay, format, subDays, addDays, startOfDay, endOfDay, isAfter } from 'date-fns';
+import { isSameDay, format, subDays, addDays, isAfter } from 'date-fns';
 
 const Timeline = () => {
     const { state } = usePlanner();
@@ -13,11 +13,6 @@ const Timeline = () => {
     const [editingActivity, setEditingActivity] = useState(null);
 
     const isToday = isSameDay(selectedDate, new Date());
-
-    const relevantActivities = activities.filter(a =>
-        a.memberId === currentMemberId &&
-        isSameDay(new Date(a.startTime), selectedDate)
-    );
 
     // Function to inject gaps. Activities are assumed to be sorted desc by default via reducer, 
     // but let's ensure sort just in case.

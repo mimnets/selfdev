@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Play, Clock, CheckCircle2, Circle } from 'lucide-react';
 import { usePlanner } from '../context/PlannerContext';
 import { CATEGORIES, THEME } from '../utils/theme';
@@ -38,7 +38,7 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
     useEffect(() => {
         // Auto-categorize when title or description changes
         if (title.length > 2) {
-            const detected = categorizeActivity(title, description, state.customRules);
+            const detected = categorizeActivity(`${title} ${description}`, state.customRules, state.categories);
             if (detected && detected !== category) {
                 setCategory(detected);
                 setAutoDetected(true);
@@ -63,7 +63,7 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
         e.preventDefault();
 
         // Learning Logic
-        const currentAuto = categorizeActivity(title, description, state.customRules);
+        const currentAuto = categorizeActivity(`${title} ${description}`, state.customRules, state.categories);
         if (currentAuto !== category && title.trim()) {
             learnRule(title.trim(), category);
         }

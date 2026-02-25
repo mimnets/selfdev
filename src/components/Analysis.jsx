@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { usePlanner } from '../context/PlannerContext';
 import {
     differenceInSeconds, isSameDay, parseISO, format,
@@ -9,13 +9,13 @@ import {
 } from 'date-fns';
 import {
     Plus, Star, Target, Edit2, Trash2, Download,
-    Calendar, ChevronLeft, ChevronRight, BarChart2,
-    Briefcase, GraduationCap
+    ChevronLeft, ChevronRight, BarChart2,
+    Briefcase
 } from 'lucide-react';
 
 const Analysis = () => {
     const { state, addGoal, updateGoal, deleteGoal } = usePlanner();
-    const { activities, currentMemberId, goals, members, sessionRequirements } = state;
+    const { activities, currentMemberId, goals, members, sessionTypes, activeSessions } = state;
     const currentMember = members.find(m => m.id === currentMemberId) || { name: 'My' };
 
     const [viewMode, setViewMode] = useState('day'); // 'day', 'week', 'month', 'year'
@@ -27,6 +27,11 @@ const Analysis = () => {
     const [goalTitle, setGoalTitle] = useState('');
     const [goalCategory, setGoalCategory] = useState('education');
     const [goalTarget, setGoalTarget] = useState(30);
+    const [goalPeriod, setGoalPeriod] = useState('daily');
+
+    const PERIOD_DAYS = { daily: 1, weekly: 7, monthly: 30, yearly: 365 };
+    const VIEW_DAYS = { day: 1, week: 7, month: 30, year: 365 };
+    const PERIOD_LABELS = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
 
     const getInterval = () => {
         switch (viewMode) {
@@ -62,7 +67,7 @@ const Analysis = () => {
             }
         }
 
-        return base.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+        return base.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
     };
 
     const filteredActivities = getFilteredActivities();
@@ -102,12 +107,12 @@ const Analysis = () => {
         }
     });
 
-    const globalMaxEnd = filteredActivities.reduce((max, a) => {
-        const end = parseISO(a.endTime || a.startTime).getTime();
-        return end > max ? end : max;
-    }, 0);
+    if (filteredActivities.length > 0 && dateFnsIsToday(selectedDate)) {
+        const globalMaxEnd = filteredActivities.reduce((max, a) => {
+            const end = parseISO(a.endTime || a.startTime).getTime();
+            return end > max ? end : max;
+        }, 0);
 
-    if (dateFnsIsToday(selectedDate)) {
         const gapStart = globalMaxEnd;
         const gapEnd = new Date().getTime();
         const currentGap = (gapEnd - gapStart) / 1000;
@@ -160,14 +165,12 @@ const Analysis = () => {
 
     const getGoalProgress = (goal) => {
         const duration = stats[goal.category] || 0;
-        let scale = 1;
-        if (viewMode === 'week') scale = 7;
-        else if (viewMode === 'month') scale = 30;
-        else if (viewMode === 'year') scale = 365;
-
-        const targetSeconds = (goal.targetValue * scale) * 60;
-        const percent = Math.min(100, (duration / targetSeconds) * 100);
-        return { duration, percent, completed: duration >= targetSeconds, targetDisplay: goal.targetValue * scale };
+        const viewDays = VIEW_DAYS[viewMode] || 1;
+        const goalDays = PERIOD_DAYS[goal.period] || 1;
+        const scaledTarget = goal.targetValue * (viewDays / goalDays);
+        const targetSeconds = scaledTarget * 60;
+        const percent = targetSeconds > 0 ? Math.min(100, (duration / targetSeconds) * 100) : 0;
+        return { duration, percent, completed: duration >= targetSeconds, scaledTarget };
     };
 
     const handleOpenAdd = () => {
@@ -175,6 +178,7 @@ const Analysis = () => {
         setGoalTitle('');
         setGoalCategory('education');
         setGoalTarget(30);
+        setGoalPeriod('daily');
         setShowGoalModal(true);
     };
 
@@ -183,6 +187,7 @@ const Analysis = () => {
         setGoalTitle(goal.title);
         setGoalCategory(goal.category);
         setGoalTarget(goal.targetValue);
+        setGoalPeriod(goal.period || 'daily');
         setShowGoalModal(true);
     };
 
@@ -194,7 +199,7 @@ const Analysis = () => {
             category: goalCategory,
             targetType: 'duration',
             targetValue: parseInt(goalTarget),
-            period: 'daily',
+            period: goalPeriod,
             updatedAt: new Date().toISOString()
         };
         if (editingGoalId) {
@@ -326,31 +331,42 @@ const Analysis = () => {
                     <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{formatDuration(totalSeconds)}</div>
                 </div>
 
-                <div style={{ ...cardStyle, borderLeft: `4px solid ${currentMemberId === 'me' ? '#3b82f6' : '#8b5cf6'}`, overflow: 'hidden' }}>
-                    <div style={{ fontSize: '11px', color: currentMemberId === 'me' ? '#3b82f6' : '#8b5cf6', fontWeight: 'bold', letterSpacing: '1px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {currentMemberId === 'me' ? <Briefcase size={12} /> : <GraduationCap size={12} />}
-                        {(sessionRequirements[currentMemberId]?.label || (currentMemberId === 'me' ? 'Work' : 'School')).toUpperCase()}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{formatDuration(totalOfficialSeconds)}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>/ {sessionRequirements[currentMemberId]?.dailyTarget || 8}h</div>
-                    </div>
+                {/* Session Type Stats */}
+                {(() => {
+                    const memberSessionTypes = sessionTypes[currentMemberId] || [];
+                    const activeSession = activeSessions[currentMemberId];
+                    // Show active session type, or first session type, or default
+                    const displayType = (activeSession && memberSessionTypes.find(st => st.id === activeSession.sessionTypeId))
+                        || memberSessionTypes[0]
+                        || { label: 'Session', dailyTarget: 8, color: '#3b82f6' };
+                    const stColor = displayType.color || '#3b82f6';
+                    const stTarget = displayType.dailyTarget || 8;
 
-                    {/* Progress Bar */}
-                    <div style={{ width: '100%', height: '4px', background: 'var(--color-card-border)', borderRadius: '2px', marginTop: '10px' }}>
-                        <div style={{
-                            width: `${Math.min(100, (totalOfficialSeconds / ((sessionRequirements[currentMemberId]?.dailyTarget || 8) * 3600)) * 100)}%`,
-                            height: '100%',
-                            background: currentMemberId === 'me' ? '#3b82f6' : '#8b5cf6',
-                            borderRadius: '2px',
-                            boxShadow: `0 0 10px ${currentMemberId === 'me' ? '#3b82f666' : '#8b5cf666'}`
-                        }} />
-                    </div>
-
-                    <div style={{ fontSize: '10px', color: '#555', marginTop: '8px' }}>
-                        {totalSeconds > 0 ? Math.round((totalOfficialSeconds / totalSeconds) * 100) : 0}% of your tracked time
-                    </div>
-                </div>
+                    return (
+                        <div style={{ ...cardStyle, borderLeft: `4px solid ${stColor}`, overflow: 'hidden' }}>
+                            <div style={{ fontSize: '11px', color: stColor, fontWeight: 'bold', letterSpacing: '1px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Briefcase size={12} />
+                                {displayType.label.toUpperCase()}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                                <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{formatDuration(totalOfficialSeconds)}</div>
+                                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>/ {stTarget}h</div>
+                            </div>
+                            <div style={{ width: '100%', height: '4px', background: 'var(--color-card-border)', borderRadius: '2px', marginTop: '10px' }}>
+                                <div style={{
+                                    width: `${Math.min(100, (totalOfficialSeconds / (stTarget * 3600)) * 100)}%`,
+                                    height: '100%',
+                                    background: stColor,
+                                    borderRadius: '2px',
+                                    boxShadow: `0 0 10px ${stColor}66`
+                                }} />
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#555', marginTop: '8px' }}>
+                                {totalSeconds > 0 ? Math.round((totalOfficialSeconds / totalSeconds) * 100) : 0}% of your tracked time
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div style={{ ...cardStyle, padding: '16px', textAlign: 'center' }}>
@@ -408,14 +424,20 @@ const Analysis = () => {
                             <div style={{ ...cardStyle, color: '#666', fontSize: '13px', textAlign: 'center' }}>No goals set for this period.</div>
                         )}
                         {memberGoals.map(goal => {
-                            const { duration, percent, completed, targetDisplay } = getGoalProgress(goal);
+                            const { duration, percent, completed, scaledTarget } = getGoalProgress(goal);
                             const theme = state.categories?.[goal.category] || { color: '#666' };
+                            const targetLabel = scaledTarget >= 60 ? `${(scaledTarget / 60).toFixed(1).replace(/\.0$/, '')}h` : `${Math.round(scaledTarget)}m`;
 
                             return (
                                 <div key={goal.id} style={{ ...cardStyle, background: 'var(--color-card-bg)', padding: '16px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <span style={{ color: 'var(--color-text-primary)', fontWeight: '600', fontSize: '14px' }}>{goal.title}</span>
+                                            <span style={{
+                                                fontSize: '9px', fontWeight: 'bold', padding: '2px 6px',
+                                                borderRadius: '6px', background: theme.color + '22', color: theme.color,
+                                                textTransform: 'uppercase', letterSpacing: '0.5px'
+                                            }}>{PERIOD_LABELS[goal.period] || 'Daily'}</span>
                                             {completed && <Star size={14} color="#00ff88" fill="#00ff88" />}
                                         </div>
                                         <div style={{ display: 'flex', gap: '8px' }}>
@@ -424,7 +446,7 @@ const Analysis = () => {
                                         </div>
                                     </div>
                                     <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
-                                        {formatDuration(duration)} / {targetDisplay}m target
+                                        {formatDuration(duration)} / {targetLabel} target
                                     </div>
                                     <div style={{ height: '4px', background: 'var(--color-card-border)', borderRadius: '2px', overflow: 'hidden' }}>
                                         <div style={{ width: `${percent}%`, height: '100%', background: theme.color }} />
@@ -450,7 +472,7 @@ const Analysis = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredActivities.map((act, i) => (
+                                {filteredActivities.map((act) => (
                                     <tr key={act.id} style={{ borderTop: '1px solid #222' }}>
                                         <td style={tableCellStyle}>{format(parseISO(act.startTime), 'hh:mm a')}</td>
                                         <td style={tableCellStyle}>
@@ -474,7 +496,7 @@ const Analysis = () => {
                 }}>
                     <div style={{ background: '#1a1a1a', borderRadius: '24px', width: '90%', maxWidth: '360px', padding: '24px', border: '1px solid #333' }}>
                         <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff', marginBottom: '20px' }}>
-                            {editingGoalId ? 'Edit Goal' : 'Set a Daily Goal'}
+                            {editingGoalId ? 'Edit Goal' : 'Set a Goal'}
                         </h2>
                         <div style={{ marginBottom: '16px' }}>
                             <label style={labelStyle}>Goal Title</label>
@@ -494,8 +516,26 @@ const Analysis = () => {
                                 ))}
                             </select>
                         </div>
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={labelStyle}>Period</label>
+                            <div style={{ display: 'flex', background: 'var(--color-bg)', borderRadius: '12px', padding: '3px', border: '1px solid var(--color-card-border)' }}>
+                                {['daily', 'weekly', 'monthly', 'yearly'].map(p => (
+                                    <button
+                                        key={p}
+                                        type="button"
+                                        onClick={() => setGoalPeriod(p)}
+                                        style={{
+                                            flex: 1, padding: '8px 4px', borderRadius: '10px', border: 'none',
+                                            background: goalPeriod === p ? 'var(--color-accent)' : 'transparent',
+                                            color: goalPeriod === p ? '#000' : 'var(--color-text-secondary)',
+                                            fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', textTransform: 'capitalize'
+                                        }}
+                                    >{p}</button>
+                                ))}
+                            </div>
+                        </div>
                         <div style={{ marginBottom: '24px' }}>
-                            <label style={labelStyle}>Daily Target (Minutes - will scale with period)</label>
+                            <label style={labelStyle}>{PERIOD_LABELS[goalPeriod]} Target (Minutes)</label>
                             <input type="number" value={goalTarget} onChange={(e) => setGoalTarget(e.target.value)} style={inputStyle} />
                         </div>
                         <div style={{ display: 'flex', gap: '12px' }}>

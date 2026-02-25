@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { SupabaseProvider, useSupabase } from './context/SupabaseContext';
+import { useState, useEffect } from 'react';
+import { PocketBaseProvider, usePocketBase } from './context/SupabaseContext';
 import { PlannerProvider } from './context/PlannerContext';
 import { Auth } from './components/Auth';
 import TopBar from './components/TopBar';
@@ -10,6 +10,7 @@ import Analysis from './components/Analysis';
 import Settings from './components/Settings';
 import Circles from './components/Circles';
 import NotificationManager from './components/NotificationManager';
+import StaleActivityDetector from './components/StaleActivityDetector';
 import { usePlanner } from './context/PlannerContext';
 import './index.css';
 
@@ -31,6 +32,7 @@ function AppContent() {
       position: 'relative'
     }}>
       <NotificationManager />
+      <StaleActivityDetector />
       <TopBar />
 
       <main style={{
@@ -59,7 +61,7 @@ function AppContent() {
 }
 
 function AuthenticatedApp() {
-  const { user, loading } = useSupabase();
+  const { user, loading } = usePocketBase();
 
   if (loading) {
     return (
@@ -68,19 +70,19 @@ function AuthenticatedApp() {
         alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
-        background: 'var(--bg-primary)'
+        background: 'var(--color-bg)'
       }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{
             width: '48px',
             height: '48px',
-            border: '4px solid var(--border-color)',
-            borderTopColor: 'var(--accent-primary)',
+            border: '4px solid var(--color-card-border)',
+            borderTopColor: 'var(--color-accent)',
             borderRadius: '50%',
             animation: 'spin 1s linear infinite',
             margin: '0 auto 16px'
           }} />
-          <p style={{ color: 'var(--text-secondary)' }}>Loading...</p>
+          <p style={{ color: 'var(--color-text-secondary)' }}>Loading...</p>
         </div>
       </div>
     );
@@ -99,11 +101,10 @@ function AuthenticatedApp() {
 
 function App() {
   return (
-    <SupabaseProvider>
+    <PocketBaseProvider>
       <AuthenticatedApp />
-    </SupabaseProvider>
+    </PocketBaseProvider>
   );
 }
 
 export default App;
-

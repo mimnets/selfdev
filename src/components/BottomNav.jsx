@@ -1,9 +1,25 @@
 import React, { useState } from 'react';
-import { Calendar, BarChart2, Users, Settings, Plus } from 'lucide-react';
+import { Calendar, BarChart2, Users, Settings, Plus, Lock } from 'lucide-react';
 import AddActivityModal from './AddActivityModal';
+import PinModal from './PinModal';
+import { usePlanner } from '../context/PlannerContext';
 
 const BottomNav = ({ activeTab, onTabChange }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [pinTarget, setPinTarget] = useState(null); // 'circles' | 'me' | null
+    const { state } = usePlanner();
+    const { members, currentMemberId, parentPin } = state;
+
+    const currentMember = members.find(m => m.id === currentMemberId);
+    const isChildLocked = currentMember?.role === 'child' && !!parentPin;
+
+    const handleLockedTab = (tab) => {
+        if (isChildLocked && (tab === 'circles' || tab === 'me')) {
+            setPinTarget(tab);
+        } else {
+            onTabChange(tab);
+        }
+    };
 
     return (
         <>
@@ -26,13 +42,13 @@ const BottomNav = ({ activeTab, onTabChange }) => {
                     icon={<Calendar size={24} />}
                     label="Timeline"
                     active={activeTab === 'timeline'}
-                    onClick={() => onTabChange('timeline')}
+                    onClick={() => handleLockedTab('timeline')}
                 />
                 <NavItem
                     icon={<BarChart2 size={24} />}
                     label="Analysis"
                     active={activeTab === 'analysis'}
-                    onClick={() => onTabChange('analysis')}
+                    onClick={() => handleLockedTab('analysis')}
                 />
 
                 {/* FAB Container - Takes up space in grid/flex to keep symmetry */}
@@ -57,7 +73,7 @@ const BottomNav = ({ activeTab, onTabChange }) => {
                                 justifyContent: 'center',
                                 boxShadow: '0 0 20px rgba(0, 255, 136, 0.4)',
                                 cursor: 'pointer',
-                                padding: 0 // Reset padding
+                                padding: 0
                             }}
                         >
                             <Plus size={32} color="#000" strokeWidth={3} />
@@ -69,24 +85,37 @@ const BottomNav = ({ activeTab, onTabChange }) => {
                     icon={<Users size={24} />}
                     label="Circles"
                     active={activeTab === 'circles'}
-                    onClick={() => onTabChange('circles')}
+                    onClick={() => handleLockedTab('circles')}
+                    locked={isChildLocked}
                 />
                 <NavItem
                     icon={<Settings size={24} />}
                     label="Me"
                     active={activeTab === 'me'}
-                    onClick={() => onTabChange('me')}
+                    onClick={() => handleLockedTab('me')}
+                    locked={isChildLocked}
                 />
             </div>
 
             {isModalOpen && (
                 <AddActivityModal onClose={() => setIsModalOpen(false)} />
             )}
+
+            {pinTarget && (
+                <PinModal
+                    correctPin={parentPin}
+                    onClose={() => setPinTarget(null)}
+                    onSuccess={() => {
+                        onTabChange(pinTarget);
+                        setPinTarget(null);
+                    }}
+                />
+            )}
         </>
     );
 };
 
-const NavItem = ({ icon, label, active, onClick }) => (
+const NavItem = ({ icon, label, active, onClick, locked }) => (
     <div
         onClick={onClick}
         style={{
@@ -98,9 +127,22 @@ const NavItem = ({ icon, label, active, onClick }) => (
             gap: '4px',
             color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
             cursor: 'pointer',
-            height: '100%'
+            height: '100%',
+            position: 'relative'
         }}>
-        {icon}
+        <div style={{ position: 'relative' }}>
+            {icon}
+            {locked && (
+                <div style={{
+                    position: 'absolute', top: '-4px', right: '-8px',
+                    background: '#ef4444', borderRadius: '50%',
+                    width: '14px', height: '14px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <Lock size={8} color="#fff" />
+                </div>
+            )}
+        </div>
         <span style={{ fontSize: '10px', fontWeight: '600' }}>{label}</span>
     </div>
 );

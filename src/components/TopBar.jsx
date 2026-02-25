@@ -1,30 +1,69 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePlanner } from '../context/PlannerContext';
-import { Settings, Briefcase, GraduationCap, Zap } from 'lucide-react';
+import { Settings, Briefcase, Cloud, CloudOff, Loader, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 import CategorySettings from './CategorySettings';
+import PinModal from './PinModal';
 
 const TopBar = () => {
-    const { state, toggleSession } = usePlanner();
+    const { state, toggleSession, syncStatus } = usePlanner();
     const [showCategorySettings, setShowCategorySettings] = useState(false);
+    const [showSessionPicker, setShowSessionPicker] = useState(false);
+    const [showPinModal, setShowPinModal] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
-    const { members, currentMemberId, activeSessions, sessionRequirements } = state;
+    const pickerRef = useRef(null);
+    const { members, currentMemberId, activeSessions, sessionTypes, parentPin } = state;
     const currentMember = members.find(m => m.id === currentMemberId) || members[0];
-    const requirement = sessionRequirements[currentMemberId] || { label: currentMemberId === 'me' ? 'Work' : 'School' };
+    const isChildLocked = currentMember?.role === 'child' && !!parentPin;
+    const memberSessions = sessionTypes[currentMemberId] || [];
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
+    // Close picker on outside click
+    useEffect(() => {
+        if (!showSessionPicker) return;
+        const handleClick = (e) => {
+            if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+                setShowSessionPicker(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [showSessionPicker]);
+
     const dateStr = format(currentTime, 'EEE, MMM d');
     const timeStr = format(currentTime, 'hh:mm a');
 
-    const isSessionActive = !!activeSessions[currentMemberId];
-    const isParent = currentMemberId === 'me' || currentMember.role === 'admin';
-    const sessionLabel = requirement.label + ' Mode';
-    const SessionIcon = isParent ? Briefcase : GraduationCap;
-    const sessionColor = isParent ? '#3b82f6' : '#8b5cf6'; // Blue for Work, Purple for School
+    const activeSession = activeSessions[currentMemberId];
+    const isSessionActive = !!activeSession;
+
+    // Find the active session type info
+    const activeSessionType = isSessionActive && activeSession.sessionTypeId
+        ? memberSessions.find(st => st.id === activeSession.sessionTypeId)
+        : null;
+    const sessionColor = activeSessionType?.color || memberSessions[0]?.color || '#3b82f6';
+    const sessionLabel = activeSessionType?.label || memberSessions[0]?.label || 'Session';
+
+    const handleSessionClick = () => {
+        if (isSessionActive) {
+            // Turn off
+            toggleSession(currentMemberId);
+        } else if (memberSessions.length <= 1) {
+            // Only one (or zero) session type — toggle directly
+            toggleSession(currentMemberId, memberSessions[0]?.id);
+        } else {
+            // Multiple types — show picker
+            setShowSessionPicker(true);
+        }
+    };
+
+    const handlePickSession = (sessionTypeId) => {
+        setShowSessionPicker(false);
+        toggleSession(currentMemberId, sessionTypeId);
+    };
 
     return (
         <div className="top-bar-container" style={{
@@ -69,45 +108,105 @@ const TopBar = () => {
                 </div>
 
                 {/* Right Column */}
-                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px' }}>
+                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', position: 'relative' }}>
                     {/* Session Toggle */}
-                    <button
-                        onClick={() => toggleSession(currentMemberId)}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            background: isSessionActive ? sessionColor : 'var(--color-card-bg)',
-                            border: `1px solid ${isSessionActive ? 'transparent' : 'var(--color-card-border)'}`,
-                            padding: '6px 10px',
-                            borderRadius: '20px',
-                            color: isSessionActive ? '#fff' : 'var(--color-text-secondary)',
-                            cursor: 'pointer',
-                            fontSize: '10px',
-                            fontWeight: 'bold',
-                            textTransform: 'uppercase',
-                            transition: 'all 0.2s',
-                            whiteSpace: 'nowrap'
-                        }}
-                    >
-                        <SessionIcon size={14} />
-                        <span style={{ display: 'none', lg: 'inline' }}>{isSessionActive ? 'Active' : sessionLabel}</span>
-                    </button>
+                    <div style={{ position: 'relative' }} ref={pickerRef}>
+                        <button
+                            onClick={handleSessionClick}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: isSessionActive ? sessionColor : 'var(--color-card-bg)',
+                                border: `1px solid ${isSessionActive ? 'transparent' : 'var(--color-card-border)'}`,
+                                padding: '6px 10px',
+                                borderRadius: '20px',
+                                color: isSessionActive ? '#fff' : 'var(--color-text-secondary)',
+                                cursor: 'pointer',
+                                fontSize: '10px',
+                                fontWeight: 'bold',
+                                textTransform: 'uppercase',
+                                transition: 'all 0.2s',
+                                whiteSpace: 'nowrap'
+                            }}
+                        >
+                            <Briefcase size={14} />
+                            <span style={{ display: 'none', lg: 'inline' }}>{isSessionActive ? sessionLabel : 'Session'}</span>
+                        </button>
+
+                        {/* Session Type Picker Dropdown */}
+                        {showSessionPicker && (
+                            <div style={{
+                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                                background: 'var(--color-card-bg)', border: '1px solid var(--color-card-border)',
+                                borderRadius: '12px', padding: '8px', minWidth: '160px',
+                                boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 200
+                            }}>
+                                {memberSessions.map(st => (
+                                    <button
+                                        key={st.id}
+                                        onClick={() => handlePickSession(st.id)}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '10px',
+                                            width: '100%', padding: '10px 12px', background: 'transparent',
+                                            border: 'none', borderRadius: '8px', cursor: 'pointer',
+                                            color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: '600',
+                                            transition: 'background 0.15s'
+                                        }}
+                                        onMouseEnter={(e) => e.target.style.background = 'var(--color-card-border)'}
+                                        onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                                    >
+                                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: st.color, flexShrink: 0 }} />
+                                        {st.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Sync Status */}
+                    <div title={syncStatus === 'synced' ? 'Synced' : syncStatus === 'syncing' ? 'Syncing...' : 'Offline'}>
+                        {syncStatus === 'syncing' && <Loader size={14} color="#facc15" style={{ animation: 'spin 1s linear infinite' }} />}
+                        {syncStatus === 'synced' && <Cloud size={14} color="#4ade80" />}
+                        {syncStatus === 'offline' && <CloudOff size={14} color="#ef4444" />}
+                    </div>
 
                     <button
-                        onClick={() => setShowCategorySettings(true)}
+                        onClick={() => isChildLocked ? setShowPinModal(true) : setShowCategorySettings(true)}
                         style={{
                             width: 36, height: 36, borderRadius: '50%', background: 'var(--color-card-bg)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            border: '1px solid var(--color-card-border)', cursor: 'pointer'
+                            border: '1px solid var(--color-card-border)', cursor: 'pointer',
+                            position: 'relative'
                         }}
                     >
                         <Settings size={18} color="var(--color-text-secondary)" />
+                        {isChildLocked && (
+                            <div style={{
+                                position: 'absolute', top: '-2px', right: '-2px',
+                                background: '#ef4444', borderRadius: '50%',
+                                width: '14px', height: '14px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                <Lock size={8} color="#fff" />
+                            </div>
+                        )}
                     </button>
                 </div>
 
                 {showCategorySettings && (
                     <CategorySettings onClose={() => setShowCategorySettings(false)} />
+                )}
+
+                {showPinModal && (
+                    <PinModal
+                        correctPin={parentPin}
+                        onClose={() => setShowPinModal(false)}
+                        onSuccess={() => {
+                            setShowPinModal(false);
+                            setShowCategorySettings(true);
+                        }}
+                    />
                 )}
             </div>
         </div>

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { usePlanner } from '../context/PlannerContext';
 import { formatDuration } from '../utils/theme';
 import { differenceInSeconds } from 'date-fns';
+import { getAutoStopLimit } from '../utils/categorizer';
 import AddActivityModal from './AddActivityModal';
 
 const LiveStatus = () => {
@@ -13,7 +14,6 @@ const LiveStatus = () => {
     useEffect(() => {
         let interval;
         if (currentActivity) {
-            // Update immediately
             const update = () => {
                 const start = new Date(currentActivity.startTime);
                 const now = new Date();
@@ -21,13 +21,10 @@ const LiveStatus = () => {
                 setElapsed(totalSeconds);
 
                 // Check Auto-Stop Limit
-                import('../utils/categorizer').then(({ getAutoStopLimit }) => {
-                    const limit = getAutoStopLimit(currentActivity.category, currentActivity.title);
-                    if (limit && totalSeconds >= limit) {
-                        // Auto-stop limit reached
-                        stopActivity();
-                    }
-                });
+                const limit = getAutoStopLimit(currentActivity.category, currentActivity.title);
+                if (limit && totalSeconds >= limit) {
+                    stopActivity();
+                }
             };
             update();
             interval = setInterval(update, 1000);

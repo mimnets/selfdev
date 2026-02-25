@@ -1,100 +1,88 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { pb } from '../lib/pocketbase';
 
-const SupabaseContext = createContext();
+const PocketBaseContext = createContext();
 
-export const SupabaseProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [session, setSession] = useState(null);
+export const PocketBaseProvider = ({ children }) => {
+    const [user, setUser] = useState(pb.authStore.record);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Get initial session
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setLoading(false);
-        });
+        // Check if existing auth is valid
+        if (pb.authStore.isValid) {
+            setUser(pb.authStore.record);
+        } else {
+            setUser(null);
+        }
+        setLoading(false);
 
         // Listen for auth changes
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setLoading(false);
+        const unsubscribe = pb.authStore.onChange((_token, record) => {
+            setUser(record);
         });
 
-        return () => subscription.unsubscribe();
+        return () => unsubscribe();
     }, []);
 
-    // Google OAuth Sign In
+    // Google OAuth Sign In (opens popup)
     const signInWithGoogle = async () => {
-        const { data, error } = await supabase.auth.signInWithOAuth({
+        const authData = await pb.collection('users').authWithOAuth2({
             provider: 'google',
-            options: {
-                redirectTo: `${window.location.origin}/`,
-                queryParams: {
-                    access_type: 'offline',
-                    prompt: 'consent',
-                }
-            }
         });
-        if (error) throw error;
-        return data;
+        return authData;
     };
 
-    // Email/Password Sign Up (optional - for future use)
+    // Email/Password Sign Up
     const signUp = async (email, password, metadata = {}) => {
-        const { data, error } = await supabase.auth.signUp({
+        await pb.collection('users').create({
             email,
             password,
-            options: {
-                data: metadata
-            }
+            passwordConfirm: password,
+            name: metadata.name || '',
         });
-        if (error) throw error;
-        return data;
+        // Auto-login after signup
+        const authData = await pb.collection('users').authWithPassword(email, password);
+        return authData;
     };
 
-    // Email/Password Sign In (optional - for future use)
+    // Email/Password Sign In
     const signIn = async (email, password) => {
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
-        if (error) throw error;
-        return data;
+        const authData = await pb.collection('users').authWithPassword(email, password);
+        return authData;
     };
 
     // Sign Out
     const signOut = async () => {
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
+        pb.authStore.clear();
     };
 
     const value = {
         user,
-        session,
+        session: pb.authStore.isValid ? { token: pb.authStore.token } : null,
         loading,
         signInWithGoogle,
         signUp,
         signIn,
         signOut,
-        supabase
+        pb,
     };
 
     return (
-        <SupabaseContext.Provider value={value}>
+        <PocketBaseContext.Provider value={value}>
             {children}
-        </SupabaseContext.Provider>
+        </PocketBaseContext.Provider>
     );
 };
 
-export const useSupabase = () => {
-    const context = useContext(SupabaseContext);
+// New hook name
+export const usePocketBase = () => {
+    const context = useContext(PocketBaseContext);
     if (context === undefined) {
-        throw new Error('useSupabase must be used within a SupabaseProvider');
+        throw new Error('usePocketBase must be used within a PocketBaseProvider');
     }
     return context;
 };
+
+// Backward-compatible aliases
+export const useSupabase = usePocketBase;
+export const SupabaseProvider = PocketBaseProvider;

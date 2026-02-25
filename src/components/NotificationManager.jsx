@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { usePlanner } from '../context/PlannerContext';
 import { Bell, X, Check } from 'lucide-react';
-import { format, parseISO, isAfter } from 'date-fns';
+import { parseISO, isAfter } from 'date-fns';
 
 const NotificationManager = () => {
     const { state, acknowledgeReminder, toggleCompleted } = usePlanner();
@@ -149,12 +149,6 @@ const NotificationManager = () => {
                 </div>
             ))}
 
-            <style>{`
-                @keyframes slideInDown {
-                    from { transform: translateY(-100%); opacity: 0; }
-                    to { transform: translateY(0); opacity: 1; }
-                }
-            `}</style>
         </div>
     );
 };
