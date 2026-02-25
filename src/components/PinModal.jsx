@@ -10,6 +10,7 @@ const PinModal = ({ onSuccess, onClose, correctPin }) => {
 
     useEffect(() => {
         inputRefs[0].current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleChange = (index, value) => {

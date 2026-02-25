@@ -1,21 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { usePlanner } from '../context/PlannerContext';
-import { isSameDay, format, parseISO, endOfDay } from 'date-fns';
+import { isSameDay, format, endOfDay } from 'date-fns';
 import { formatDuration } from '../utils/theme';
 import { differenceInSeconds } from 'date-fns';
 import { X, Clock, AlertTriangle } from 'lucide-react';
 
 const StaleActivityDetector = () => {
     const { state, resolveStaleActivity } = usePlanner();
-    const [staleInfo, setStaleInfo] = useState(null); // { memberId, activity }
     const [customEndTime, setCustomEndTime] = useState('');
     const [showCustom, setShowCustom] = useState(false);
     const [dismissed, setDismissed] = useState(false);
 
-    // Check for stale activities on mount and when currentActivities change
-    useEffect(() => {
-        if (dismissed) return;
-
+    // Derive stale activity info from state (no effect needed)
+    let staleInfo = null;
+    if (!dismissed) {
         const now = new Date();
         const currentActivities = state.currentActivities || {};
 
@@ -25,13 +23,11 @@ const StaleActivityDetector = () => {
 
             // If activity started on a different day than today, it's stale
             if (!isSameDay(startTime, now)) {
-                setStaleInfo({ memberId, activity });
-                return;
+                staleInfo = { memberId, activity };
+                break;
             }
         }
-
-        setStaleInfo(null);
-    }, [state.currentActivities, dismissed]);
+    }
 
     if (!staleInfo || dismissed) return null;
 
@@ -46,19 +42,19 @@ const StaleActivityDetector = () => {
 
     const handleEndAtMidnight = () => {
         resolveStaleActivity(memberId, midnightEnd);
-        setStaleInfo(null);
+        setDismissed(true);
     };
 
     const handleEndNow = () => {
         resolveStaleActivity(memberId, new Date().toISOString());
-        setStaleInfo(null);
+        setDismissed(true);
     };
 
     const handleCustomEnd = () => {
         if (!customEndTime) return;
         const endTimeISO = new Date(customEndTime).toISOString();
         resolveStaleActivity(memberId, endTimeISO);
-        setStaleInfo(null);
+        setDismissed(true);
     };
 
     const handleDismiss = () => {

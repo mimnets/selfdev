@@ -403,7 +403,7 @@ function plannerReducer(state, action) {
 export function PlannerProvider({ children }) {
     const { user } = usePocketBase();
     const [syncStatus, setSyncStatus] = useState('synced'); // 'synced' | 'syncing' | 'offline'
-    const [dataLoaded, setDataLoaded] = useState(false);
+    const dataLoadedRef = useRef(false);
     const memberIdMapRef = useRef({});
 
     const [state, baseDispatch] = useReducer(plannerReducer, initialState, (initial) => {
@@ -442,7 +442,9 @@ export function PlannerProvider({ children }) {
 
     // Wrapping dispatch to also trigger background sync
     const stateRef = useRef(state);
-    stateRef.current = state;
+    useEffect(() => {
+        stateRef.current = state;
+    });
 
     const dispatch = useCallback((action) => {
         baseDispatch(action);
@@ -464,7 +466,7 @@ export function PlannerProvider({ children }) {
     // Load data from PocketBase when user becomes available
     useEffect(() => {
         if (!user) {
-            setDataLoaded(false);
+            dataLoadedRef.current = false;
             return;
         }
 
@@ -550,12 +552,12 @@ export function PlannerProvider({ children }) {
                     }
                 });
 
-                setDataLoaded(true);
+                dataLoadedRef.current = true;
                 setSyncStatus('synced');
             } catch (err) {
                 console.error('[PlannerContext] Failed to load from PocketBase, using localStorage:', err);
                 setSyncStatus('offline');
-                setDataLoaded(true); // Still mark loaded so UI isn't blocked
+                dataLoadedRef.current = true; // Still mark loaded so UI isn't blocked
             }
         };
 
