@@ -40,11 +40,12 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
         if (title.length > 2) {
             const detected = categorizeActivity(`${title} ${description}`, state.customRules, state.categories);
             if (detected && detected !== category) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setCategory(detected);
                 setAutoDetected(true);
             }
         }
-    }, [title, description, state.customRules]);
+    }, [title, description, state.customRules, category]);
 
     const handleCategorySelect = (cat) => {
         setCategory(cat);

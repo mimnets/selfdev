@@ -75,10 +75,11 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
 
     // Auto-cat logic
     useEffect(() => {
-        if (title.length > 2) {
+        if (title.length > 2 && !autoDetected) {
             const combinedText = `${title} ${description}`;
             const detected = categorizeActivity(combinedText, state.customRules, state.categories);
             if (detected && detected !== category) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setCategory(detected);
                 setAutoDetected(true);
             }
