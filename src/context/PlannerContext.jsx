@@ -498,6 +498,23 @@ export function PlannerProvider({ children }) {
                     await db.bulkUpsertCategories(defaultCats);
                 }
 
+                // Reconcile: push any localStorage-only members to PocketBase
+                // (handles members that failed to sync previously, e.g. due to role casing bug)
+                const localState = JSON.parse(localStorage.getItem('planner-state') || '{}');
+                const localMembers = localState.members || [];
+                const dbMemberNames = new Set(members.map(m => m.name?.toLowerCase()));
+                for (const localMember of localMembers) {
+                    if (localMember.id === 'me') continue; // primary already handled
+                    if (dbMemberNames.has(localMember.name?.toLowerCase())) continue;
+                    try {
+                        const created = await db.createMember(memberToDb(localMember));
+                        members = [...members, created];
+                        console.log('[PlannerContext] Reconciled missing member:', localMember.name);
+                    } catch (err) {
+                        console.warn('[PlannerContext] Failed to reconcile member:', localMember.name, err);
+                    }
+                }
+
                 // Build member ID map
                 const idMap = buildMemberIdMap(members);
                 memberIdMapRef.current = idMap;
