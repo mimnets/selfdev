@@ -28,10 +28,13 @@ const LiveStatus = () => {
             };
             update();
             interval = setInterval(update, 1000);
-        } else {
-            setElapsed(0);
         }
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            if (!currentActivity) {
+                setElapsed(0);
+            }
+        };
     }, [currentActivity, stopActivity]);
 
     if (!currentActivity) {

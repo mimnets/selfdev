@@ -5,17 +5,9 @@ const PocketBaseContext = createContext();
 
 export const PocketBaseProvider = ({ children }) => {
     const [user, setUser] = useState(pb.authStore.record);
-    const [loading, setLoading] = useState(true);
+    const [loading] = useState(false);
 
     useEffect(() => {
-        // Check if existing auth is valid
-        if (pb.authStore.isValid) {
-            setUser(pb.authStore.record);
-        } else {
-            setUser(null);
-        }
-        setLoading(false);
-
         // Listen for auth changes
         const unsubscribe = pb.authStore.onChange((_token, record) => {
             setUser(record);

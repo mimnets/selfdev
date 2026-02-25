@@ -9,7 +9,6 @@ import {
     activityToDb,
     categoryToDb,
     goalToDb,
-    settingsToDb,
     memberToDb,
     resolveMemberId,
 } from './mappers';
@@ -212,7 +211,7 @@ export function syncAction(action, state) {
         }
 
         case 'UPDATE_CATEGORY': {
-            const { id: catKey2, updates: catUpdates } = payload;
+            const { id: catKey2 } = payload;
             const fullCat = state.categories[catKey2];
             if (fullCat) {
                 const dbCat = categoryToDb(catKey2, fullCat);

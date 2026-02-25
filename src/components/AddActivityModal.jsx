@@ -84,7 +84,7 @@ const AddActivityModal = ({ onClose, initialData = null }) => {
                 setAutoDetected(true);
             }
         }
-    }, [title, description, state.customRules, state.categories, category]);
+    }, [title, description, state.customRules, state.categories, category, autoDetected]);
 
     const handleCategorySelect = (cat) => {
         setCategory(cat);
