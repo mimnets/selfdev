@@ -507,7 +507,7 @@ export function PlannerProvider({ children }) {
                 const appMembers = members.map(m => {
                     const appMember = memberFromDb(m);
                     // If this is the primary member, use 'me' as the app ID
-                    if (m.role === 'me') {
+                    if (m.role?.toUpperCase() === 'ME') {
                         return { ...appMember, id: 'me' };
                     }
                     return appMember;
