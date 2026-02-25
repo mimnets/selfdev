@@ -92,7 +92,11 @@ function AuthenticatedApp() {
     return <Auth />;
   }
 
-  return <AppContent />;
+  return (
+    <PlannerProvider>
+      <AppContent />
+    </PlannerProvider>
+  );
 }
 
 function App() {
