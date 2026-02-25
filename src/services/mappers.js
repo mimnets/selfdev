@@ -58,15 +58,18 @@ export function memberFromDb(row) {
 }
 
 function mapRoleToDb(role) {
-    // DB CHECK constraint: 'me', 'child', 'spouse', 'other'
-    if (role === 'admin') return 'me';
-    if (['me', 'child', 'spouse', 'other'].includes(role)) return role;
-    return 'other';
+    // DB CHECK constraint: 'ME', 'CHILD', 'SPOUSE', 'OTHER'
+    if (role === 'admin') return 'ME';
+    const upper = (role || 'OTHER').toUpperCase();
+    if (['ME', 'CHILD', 'SPOUSE', 'OTHER'].includes(upper)) return upper;
+    return 'OTHER';
 }
 
 function mapRoleFromDb(role) {
-    if (role === 'me') return 'admin';
-    return role;
+    if (!role) return 'admin';
+    const lower = role.toLowerCase();
+    if (lower === 'me') return 'admin';
+    return lower;
 }
 
 // ============ CATEGORIES ============
@@ -198,7 +201,7 @@ export function resolveAppMemberId(dbUuid, memberIdMap) {
  */
 export function buildMemberIdMap(dbMembers) {
     const map = {};
-    const primaryMember = dbMembers.find(m => m.role === 'me');
+    const primaryMember = dbMembers.find(m => m.role?.toUpperCase() === 'ME');
     if (primaryMember) {
         map['me'] = primaryMember.id;
     }
