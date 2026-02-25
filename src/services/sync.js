@@ -243,6 +243,10 @@ export function syncAction(action, state) {
             debounceSettings({ theme: state.theme });
             break;
 
+        case 'SET_PARENT_PIN':
+            debounceSettings({ parent_pin: state.parentPin });
+            break;
+
         case 'ACKNOWLEDGE_REMINDER':
             debounceSettings({ acknowledged_reminders: state.acknowledgedReminders });
             break;

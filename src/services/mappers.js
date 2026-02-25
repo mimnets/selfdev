@@ -138,6 +138,7 @@ export function settingsToDb(state) {
         session_types: state.sessionTypes || {},
         acknowledged_reminders: state.acknowledgedReminders || [],
         custom_rules: state.customRules || {},
+        parent_pin: state.parentPin || null,
     };
 }
 
@@ -150,6 +151,7 @@ export function settingsFromDb(row) {
         sessionTypes: row.session_types || migrateSessionRequirements(row.session_requirements) || {},
         acknowledgedReminders: row.acknowledged_reminders || [],
         customRules: row.custom_rules || {},
+        parentPin: row.parent_pin || null,
     };
 }
 
